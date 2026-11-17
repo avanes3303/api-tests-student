@@ -6,12 +6,15 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"time"
 
 	"github.com/steinfletcher/apitest"
 )
 
 const (
 	defaultUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+	requestTimeout   = 30 * time.Second
+	requestInterval  = 500 * time.Millisecond
 )
 
 type ApiTest struct {
@@ -20,6 +23,7 @@ type ApiTest struct {
 	host      string
 }
 
+// New создаёт настройки HTTP-клиента для учебного API.
 func New() *ApiTest {
 	return &ApiTest{
 		userAgent: defaultUserAgent,
@@ -27,8 +31,14 @@ func New() *ApiTest {
 	}
 }
 
+// GetRunner возвращает независимый клиент для нового запроса.
 func GetRunner() *ApiTest {
 	return New()
+}
+
+// NewHTTPClient возвращает HTTP-клиент с ограниченным временем запроса.
+func NewHTTPClient() *http.Client {
+	return &http.Client{Timeout: requestTimeout}
 }
 
 // Auth Установка Bearer token-а для прохождения авторизации на приватные ручки
@@ -37,13 +47,16 @@ func (at *ApiTest) Auth(token string) *ApiTest {
 	return at
 }
 
+// Create создаёт запрос с общими настройками API и таймаутом.
 func (at *ApiTest) Create() *apitest.APITest {
-	apitestNew := apitest.New().EnableNetworking()
+	apitestNew := apitest.New().EnableNetworking().HttpClient(NewHTTPClient())
 	if os.Getenv("DEBUG") == "true" {
 		apitestNew = apitestNew.Debug()
 	}
 	return apitestNew.
 		Intercept(func(request *http.Request) {
+			// Ограничиваем частоту запросов к учебному стенду при пакетном прогоне.
+			time.Sleep(requestInterval)
 			request.Header.Set("User-Agent", at.userAgent)
 
 			if err := mergeServiceUrls(at.host, request.URL); err != nil {

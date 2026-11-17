@@ -21,3 +21,13 @@ func TearDownSuite() {
 func Precondition(text string) {
 	utils.LogWithLabelAndTimeStamp("Precondition", text)
 }
+
+// Step записывает действие сценария в журнал теста.
+func Step(text string) {
+	utils.LogWithLabelAndTimeStamp("Шаг", text)
+}
+
+// Check записывает успешный результат проверок сценария.
+func Check(text string) {
+	utils.LogWithLabelAndTimeStamp("Проверка", text)
+}

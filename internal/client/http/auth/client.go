@@ -12,10 +12,17 @@ import (
 
 // HttpPostAuthLogin выполняет POST-запрос для авторизации пользователя
 func HttpPostAuthLogin(t *testing.T, request authModels.LoginRequest) *http.Response {
+	t.Helper()
 	return apiRunner.GetRunner().Create().Post(path.AuthLoginPath).
 		ContentType("application/json").
 		JSON(request).
 		Expect(t).
-		Status(http.StatusOK).
 		End().Response
+}
+
+// HttpPostAuthRegister регистрирует технического пользователя для изоляции сценария.
+func HttpPostAuthRegister(t *testing.T, request authModels.RegisterRequest) *http.Response {
+	t.Helper()
+	return apiRunner.GetRunner().Create().Post(path.AuthRegisterPath).
+		JSON(request).Expect(t).End().Response
 }

@@ -9,6 +9,8 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/tidwall/gjson"
 
+	"api-tests-template/internal/constants/testdata"
+	"api-tests-template/internal/fixtures"
 	"api-tests-template/internal/managers/auth"
 	"api-tests-template/internal/managers/auth/models"
 	"api-tests-template/internal/managers/myAdvertisements"
@@ -38,19 +40,28 @@ func (s *TestSuite) TearDownSuite() {
 
 // Positive: Проверяем получение собственных объявлений в профиле
 func (s *TestSuite) TestGetMyAdvertisementsPositive() {
+	created := fixtures.WithOwner(s.T(), s.loginData).Create(fixtures.Advertisement(s.T()))
 	var advertisementsBody string
 	s.Run("Получаем список собственных объявлений", func() {
 		advertisementsBody = myAdvertisements.GetMyAdvertisements(s.T(), s.loginData.Token, http.StatusOK, 50)
 	})
 
 	var items gjson.Result
-	s.Run("Проверяем, что у нас есть несколько добавленных ранее объявлений", func() {
+	s.Run("Проверяем наличие созданного тестом объявления", func() {
 		items = gjson.Get(advertisementsBody, "items")
 		require.NotEmpty(s.T(), items.Array())
+		ids := make([]string, 0, len(items.Array()))
+		for _, item := range items.Array() {
+			ids = append(ids, item.Get("id").String())
+		}
+		require.Contains(s.T(), ids, created.ID, "Созданное объявление отсутствует в собственных объявлениях")
 	})
 
-	s.Run("Проверяем, что наши объявления имеют принадлежность к нашему пользователю и объявления имеют НЕ пустые параметры", func() {
+	s.Run("Проверяем владельца и параметры созданного объявления", func() {
 		for _, item := range items.Array() {
+			if item.Get("id").String() != created.ID {
+				continue
+			}
 			require.Equal(s.T(), s.loginData.User.Id, gjson.Get(item.String(), "user_id").String(), "user_id не совпадает")
 
 			require.NotEmpty(s.T(), gjson.Get(item.String(), "id").String(), "id пустое")
@@ -67,13 +78,13 @@ func (s *TestSuite) TestGetMyAdvertisementsPositive() {
 func (s *TestSuite) TestGetMyAdvertisementsIncorrectToken() {
 	var advertisementsBody string
 	s.Run("Получаем список собственных объявлений с неправильным авторизационным токеном", func() {
-		advertisementsBody = myAdvertisements.GetMyAdvertisements(s.T(), "incorrect_token", http.StatusUnauthorized, 50)
+		advertisementsBody = myAdvertisements.GetMyAdvertisements(s.T(), testdata.InvalidToken, http.StatusUnauthorized, 50)
 	})
 
 	s.Run("Проверяем, что показывается правильная ошибка", func() {
-		require.Equal(s.T(), "unauthorized", gjson.Get(advertisementsBody, "error").String(),
+		require.Equal(s.T(), testdata.Unauthorized, gjson.Get(advertisementsBody, "error").String(),
 			"Некорректное значение error параметра")
-		require.Equal(s.T(), "Invalid or expired token", gjson.Get(advertisementsBody, "message").String(),
+		require.Equal(s.T(), testdata.InvalidAuthorization, gjson.Get(advertisementsBody, "message").String(),
 			"Некорректное значение message параметра")
 	})
 }

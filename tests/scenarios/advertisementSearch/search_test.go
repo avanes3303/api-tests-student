@@ -1,7 +1,6 @@
 package advertisementSearch
 
 import (
-	"os"
 	"strings"
 	"testing"
 
@@ -9,23 +8,20 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"api-tests-template/internal/assertions"
+	"api-tests-template/internal/fixtures"
 	advList "api-tests-template/internal/managers/advertisements"
-	"api-tests-template/internal/managers/auth"
 	authModels "api-tests-template/internal/managers/auth/models"
 	"api-tests-template/internal/utils"
 	base "api-tests-template/tests"
 )
 
-const (
-	existingAdTitle = "Учебное объявление для API-тестов"
-	searchBeginning = "Учебное"
-	searchMiddle    = "объявление"
-	searchEnd       = "API-тестов"
-)
-
 type TestSuite struct {
 	suite.Suite
-	loginData authModels.LoginOkResponse
+	loginData       authModels.LoginOkResponse
+	existingAdTitle string
+	searchBeginning string
+	searchMiddle    string
+	searchEnd       string
 }
 
 func TestSuiteRun(t *testing.T) {
@@ -33,17 +29,18 @@ func TestSuiteRun(t *testing.T) {
 }
 
 func (s *TestSuite) SetupSuite() {
-	base.SetupSuite()
+	s.loginData = fixtures.New(s.T()).Owner
+}
 
-	base.Precondition("Проверяем, что название существующего объявления и подстроки заданы")
-	require.NotEmpty(s.T(), existingAdTitle, "Задайте existingAdTitle")
-	require.NotEmpty(s.T(), searchBeginning, "Задайте searchBeginning")
-	require.NotEmpty(s.T(), searchMiddle, "Задайте searchMiddle")
-	require.NotEmpty(s.T(), searchEnd, "Задайте searchEnd")
-
-	base.Precondition("Авторизация пользователя из переменных окружения")
-	s.loginData = auth.Login(s.T(), os.Getenv("TEST_LOGIN"), os.Getenv("TEST_PASSWORD"))
-	require.NotEmpty(s.T(), s.loginData.Token, "Авторизация не вернула токен")
+// SetupTest создаёт собственное объявление с уникальными подстроками для каждого теста.
+func (s *TestSuite) SetupTest() {
+	s.searchBeginning = "Учебное" + utils.RandomString(6)
+	s.searchMiddle = "объявление" + utils.RandomString(6)
+	s.searchEnd = "API" + utils.RandomString(6)
+	s.existingAdTitle = s.searchBeginning + " " + s.searchMiddle + " " + s.searchEnd
+	request := fixtures.Advertisement(s.T())
+	request.Fields["title"] = s.existingAdTitle
+	fixtures.WithOwner(s.T(), s.loginData).Create(request)
 }
 
 func (s *TestSuite) TearDownSuite() {
@@ -51,13 +48,14 @@ func (s *TestSuite) TearDownSuite() {
 }
 
 func (s *TestSuite) TestSearchByTitle() {
-	list := advList.GetAdvertisementsList(s.T(), s.loginData.Token, searchMiddle)
+	base.Step("Поиск по уникальной подстроке названия")
+	list := advList.GetAdvertisementsList(s.T(), s.loginData.Token, s.searchMiddle)
 
 	s.Run("В ответе есть хотя бы одно объявление", func() {
 		require.NotEmpty(s.T(), list.Items, "Поиск вернул пустой список объявлений")
 	})
 	s.Run("Среди найденных есть наше объявление", func() {
-		assertions.ContainsAdvertisementByTitle(s.T(), list.Items, existingAdTitle)
+		assertions.ContainsAdvertisementByTitle(s.T(), list.Items, s.existingAdTitle)
 	})
 }
 
@@ -66,19 +64,20 @@ func (s *TestSuite) TestSearchByTitle_Substring() {
 		name   string
 		search string
 	}{
-		{"начало", searchBeginning},
-		{"середина", searchMiddle},
-		{"конец", searchEnd},
-		{"нижний регистр", strings.ToLower(searchMiddle)},
-		{"верхний регистр", strings.ToUpper(searchMiddle)},
-		{"смешанный регистр", utils.MixCase(searchMiddle)},
+		{"начало", s.searchBeginning},
+		{"середина", s.searchMiddle},
+		{"конец", s.searchEnd},
+		{"нижний регистр", strings.ToLower(s.searchMiddle)},
+		{"верхний регистр", strings.ToUpper(s.searchMiddle)},
+		{"смешанный регистр", utils.MixCase(s.searchMiddle)},
 	}
 
 	for _, tc := range cases {
 		s.Run(tc.name, func() {
+			base.Step("Поиск названия: " + tc.name)
 			list := advList.GetAdvertisementsList(s.T(), s.loginData.Token, tc.search)
 			require.NotEmpty(s.T(), list.Items, "Поиск по подстроке %q вернул пустой список", tc.search)
-			assertions.ContainsAdvertisementByTitle(s.T(), list.Items, existingAdTitle)
+			assertions.ContainsAdvertisementByTitle(s.T(), list.Items, s.existingAdTitle)
 		})
 	}
 }
